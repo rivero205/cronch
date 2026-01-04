@@ -23,7 +23,7 @@ const ReportModal = ({ report, onClose }) => {
         const monday = new Date(d.setDate(diff));
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
-        
+
         return {
             start: monday.toISOString().split('T')[0],
             end: sunday.toISOString().split('T')[0]
@@ -52,38 +52,38 @@ const ReportModal = ({ report, onClose }) => {
 
         try {
             let data;
-            
+
             switch (report.id) {
                 case 1: // Resumen Semanal
                     data = await api.getWeeklyReport(date);
                     break;
-                    
+
                 case 2: // Resumen Mensual
                     data = await api.getMonthlyReport(date);
                     break;
-                    
+
                 case 3: { // Rentabilidad por Producto
                     const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
                     data = await api.getProductProfitability(dates.start, dates.end);
                     break;
                 }
-                
+
                 case 4: { // Tendencia Diaria
                     const dates = getWeekDates(date);
                     data = await api.getDailyTrend(dates.start, dates.end);
                     break;
                 }
-                
+
                 case 5: { // Producto Más Rentable
                     const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
                     data = await api.getMostProfitable(dates.start, dates.end);
                     break;
                 }
-                
+
                 default:
                     throw new Error('Reporte no implementado');
             }
-            
+
             setReportData(data);
         } catch (err) {
             setError(err.message || 'Error al generar el reporte');
@@ -112,41 +112,56 @@ const ReportModal = ({ report, onClose }) => {
         try {
             let detailedData;
 
+            // Generate filename based on report type and dates
+            let filename = 'reporte.xlsx';
+            let blob;
+
             switch (report.id) {
                 case 1: // Resumen Semanal
-                    detailedData = await api.getDetailedWeeklyReport(date);
-                    downloadWeeklyReport(detailedData);
+                    blob = await api.getDetailedWeeklyReport(date);
+                    filename = `Reporte_Semanal_${date}.xlsx`;
                     break;
 
                 case 2: // Resumen Mensual
-                    detailedData = await api.getDetailedMonthlyReport(date);
-                    downloadMonthlyReport(detailedData);
+                    blob = await api.getDetailedMonthlyReport(date);
+                    filename = `Reporte_Mensual_${date}.xlsx`;
                     break;
 
                 case 3: { // Rentabilidad por Producto
                     const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
-                    detailedData = await api.getDetailedProductProfitability(dates.start, dates.end);
-                    downloadProductProfitabilityReport(detailedData);
+                    blob = await api.getDetailedProductProfitability(dates.start, dates.end);
+                    filename = `Rentabilidad_Productos_${dates.start}_${dates.end}.xlsx`;
                     break;
                 }
 
                 case 4: { // Tendencia Diaria
                     const dates = getWeekDates(date);
-                    detailedData = await api.getDetailedDailyTrend(dates.start, dates.end);
-                    downloadDailyTrendReport(detailedData);
+                    blob = await api.getDetailedDailyTrend(dates.start, dates.end);
+                    filename = `Tendencia_Diaria_${dates.start}_${dates.end}.xlsx`;
                     break;
                 }
 
                 case 5: { // Producto Más Rentable
                     const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
-                    detailedData = await api.getDetailedMostProfitable(dates.start, dates.end);
-                    downloadMostProfitableReport(detailedData);
+                    blob = await api.getDetailedMostProfitable(dates.start, dates.end);
+                    filename = `Producto_Mas_Rentable_${dates.start}_${dates.end}.xlsx`;
                     break;
                 }
 
                 default:
                     throw new Error('Reporte no implementado');
             }
+
+            // Trigger download
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
         } catch (err) {
             setError(err.message || 'Error al descargar el reporte');
         } finally {
@@ -154,248 +169,8 @@ const ReportModal = ({ report, onClose }) => {
         }
     };
 
-    const downloadWeeklyReport = (data) => {
-        if (!data || !data.period || !data.summary || !data.details) {
-            setError('Error: Datos del reporte incompletos');
-            return;
-        }
-        
-        let content = `REPORTE SEMANAL DETALLADO\n`;
-        content += `Período: ${data.period.start} al ${data.period.end}\n`;
-        content += '='.repeat(80) + '\n\n';
+    // Legacy text generation functions removed
 
-        // Resumen
-        content += `RESUMEN EJECUTIVO\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Total Ventas:          ${formatCurrency(data.summary.totalSales)}\n`;
-        content += `Total Gastos:          ${formatCurrency(data.summary.totalExpenses)}\n`;
-        content += `Ganancia Semanal:      ${formatCurrency(data.summary.weeklyProfit)}\n`;
-        content += `Promedio Ventas/Día:   ${formatCurrency(data.summary.dailyAverageSales)}\n`;
-        content += `Promedio Ganancia/Día: ${formatCurrency(data.summary.dailyAverageProfit)}\n\n`;
-
-        // Resumen por día
-        content += `RESUMEN DIARIO\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Ventas        | Gastos        | Ganancia\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailySummary.forEach(day => {
-            content += `${day.date} | ${formatCurrency(day.sales).padEnd(13)} | ${formatCurrency(day.expenses).padEnd(13)} | ${formatCurrency(day.profit)}\n`;
-        });
-
-        // Detalle de ventas
-        content += `\n\nDETALLE DE VENTAS POR DÍA\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Producto              | Cantidad | Precio Unit. | Total\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailySales.forEach(sale => {
-            content += `${sale.date} | ${sale.productName.padEnd(20)} | ${String(sale.quantity).padEnd(8)} | ${formatCurrency(sale.unitPrice).padEnd(12)} | ${formatCurrency(sale.total)}\n`;
-        });
-
-        // Detalle de gastos
-        content += `\n\nDETALLE DE GASTOS POR DÍA\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Descripción                          | Monto\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailyExpenses.forEach(expense => {
-            content += `${expense.date} | ${expense.description.padEnd(40)} | ${formatCurrency(expense.amount)}\n`;
-        });
-
-        downloadTextFile(content, `Reporte_Semanal_${data.period.start}_${data.period.end}.txt`);
-    };
-
-    const downloadMonthlyReport = (data) => {
-        if (!data || !data.period || !data.summary || !data.details) {
-            setError('Error: Datos del reporte incompletos');
-            return;
-        }
-        
-        let content = `REPORTE MENSUAL DETALLADO\n`;
-        content += `Mes: ${data.month}\n`;
-        content += `Período: ${data.period.start} al ${data.period.end}\n`;
-        content += '='.repeat(80) + '\n\n';
-
-        // Resumen
-        content += `RESUMEN EJECUTIVO\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Días del mes:       ${data.summary.daysInMonth}\n`;
-        content += `Total Ventas:       ${formatCurrency(data.summary.totalSales)}\n`;
-        content += `Total Gastos:       ${formatCurrency(data.summary.totalExpenses)}\n`;
-        content += `Ganancia Mensual:   ${formatCurrency(data.summary.monthlyProfit)}\n`;
-        content += `Promedio Diario:    ${formatCurrency(data.summary.dailyAverage)}\n\n`;
-
-        // Top productos
-        content += `TOP 5 PRODUCTOS MÁS VENDIDOS\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Producto              | Cantidad | Ingresos\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.topProducts.forEach((product, idx) => {
-            content += `${(idx + 1)}. ${product.name.padEnd(20)} | ${String(product.totalQuantity).padEnd(8)} | ${formatCurrency(product.totalRevenue)}\n`;
-        });
-
-        // Resumen por día
-        content += `\n\nRESUMEN DIARIO\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Ventas        | Gastos        | Ganancia\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailySummary.forEach(day => {
-            content += `${day.date} | ${formatCurrency(day.sales).padEnd(13)} | ${formatCurrency(day.expenses).padEnd(13)} | ${formatCurrency(day.profit)}\n`;
-        });
-
-        // Detalle de ventas
-        content += `\n\nDETALLE COMPLETO DE VENTAS\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Producto              | Cantidad | Precio Unit. | Total\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailySales.forEach(sale => {
-            content += `${sale.date} | ${sale.productName.padEnd(20)} | ${String(sale.quantity).padEnd(8)} | ${formatCurrency(sale.unitPrice).padEnd(12)} | ${formatCurrency(sale.total)}\n`;
-        });
-
-        // Detalle de gastos
-        content += `\n\nDETALLE COMPLETO DE GASTOS\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Descripción                          | Monto\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailyExpenses.forEach(expense => {
-            content += `${expense.date} | ${expense.description.padEnd(40)} | ${formatCurrency(expense.amount)}\n`;
-        });
-
-        // Detalle de producción
-        content += `\n\nDETALLE DE PRODUCCIÓN\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Producto              | Cantidad | Costo Unit. | Costo Total\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailyProduction.forEach(prod => {
-            content += `${prod.date} | ${prod.productName.padEnd(20)} | ${String(prod.quantity).padEnd(8)} | ${formatCurrency(prod.unitCost).padEnd(11)} | ${formatCurrency(prod.totalCost)}\n`;
-        });
-
-        downloadTextFile(content, `Reporte_Mensual_${data.month}.txt`);
-    };
-
-    const downloadProductProfitabilityReport = (data) => {
-        if (!data || !data.period || !data.summary || !data.details) {
-            setError('Error: Datos del reporte incompletos');
-            return;
-        }
-        
-        let content = `REPORTE DE RENTABILIDAD POR PRODUCTO (DETALLADO)\n`;
-        content += `Período: ${data.period.start} al ${data.period.end}\n`;
-        content += '='.repeat(80) + '\n\n';
-
-        // Resumen por producto
-        content += `RESUMEN DE RENTABILIDAD\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Producto              | Vendidos | Total Ventas | Costo Prod. | Ganancia\n`;
-        content += '-'.repeat(80) + '\n';
-        data.summary.products.forEach(product => {
-            content += `${product.name.padEnd(20)} | ${String(product.quantitySold).padEnd(8)} | ${formatCurrency(product.totalSales).padEnd(12)} | ${formatCurrency(product.productionCost).padEnd(11)} | ${formatCurrency(product.profit)}\n`;
-        });
-
-        // Ventas por día y producto
-        content += `\n\nVENTAS DETALLADAS POR PRODUCTO Y DÍA\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Producto              | Cantidad | Precio Unit. | Ingresos\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.salesByDay.forEach(sale => {
-            content += `${sale.date} | ${sale.productName.padEnd(20)} | ${String(sale.quantity).padEnd(8)} | ${formatCurrency(sale.unitPrice).padEnd(12)} | ${formatCurrency(sale.revenue)}\n`;
-        });
-
-        // Producción por día y producto
-        content += `\n\nPRODUCCIÓN DETALLADA POR PRODUCTO Y DÍA\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Producto              | Cantidad | Costo Unit. | Costo Total\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.productionByDay.forEach(prod => {
-            content += `${prod.date} | ${prod.productName.padEnd(20)} | ${String(prod.quantity).padEnd(8)} | ${formatCurrency(prod.unitCost).padEnd(11)} | ${formatCurrency(prod.cost)}\n`;
-        });
-
-        downloadTextFile(content, `Rentabilidad_Productos_${data.period.start}_${data.period.end}.txt`);
-    };
-
-    const downloadDailyTrendReport = (data) => {
-        if (!data || !data.period || !data.summary || !data.details) {
-            setError('Error: Datos del reporte incompletos');
-            return;
-        }
-        
-        let content = `REPORTE DE TENDENCIA DIARIA (DETALLADO)\n`;
-        content += `Semana: ${data.period.start} al ${data.period.end}\n`;
-        content += '='.repeat(80) + '\n\n';
-
-        // Resumen
-        content += `RESUMEN DIARIO\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Ventas        | Gastos        | Ganancia\n`;
-        content += '-'.repeat(80) + '\n';
-        data.summary.dailyData.forEach(day => {
-            content += `${day.date} | ${formatCurrency(day.sales).padEnd(13)} | ${formatCurrency(day.expenses).padEnd(13)} | ${formatCurrency(day.profit)}\n`;
-        });
-
-        // Detalle de ventas
-        content += `\n\nDETALLE DE VENTAS POR DÍA\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Producto              | Cantidad | Precio Unit. | Total\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailySales.forEach(sale => {
-            content += `${sale.date} | ${sale.productName.padEnd(20)} | ${String(sale.quantity).padEnd(8)} | ${formatCurrency(sale.unitPrice).padEnd(12)} | ${formatCurrency(sale.total)}\n`;
-        });
-
-        // Detalle de gastos
-        content += `\n\nDETALLE DE GASTOS POR DÍA\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Fecha       | Descripción                          | Monto\n`;
-        content += '-'.repeat(80) + '\n';
-        data.details.dailyExpenses.forEach(expense => {
-            content += `${expense.date} | ${expense.description.padEnd(40)} | ${formatCurrency(expense.amount)}\n`;
-        });
-
-        downloadTextFile(content, `Tendencia_Diaria_${data.period.start}_${data.period.end}.txt`);
-    };
-
-    const downloadMostProfitableReport = (data) => {
-        if (!data || !data.period || !data.allProducts) {
-            setError('Error: Datos del reporte incompletos');
-            return;
-        }
-        
-        let content = `REPORTE DE PRODUCTO MÁS RENTABLE\n`;
-        content += `Período: ${data.period.start} al ${data.period.end}\n`;
-        content += '='.repeat(80) + '\n\n';
-
-        if (!data.mostProfitable) {
-            content += `No hay productos rentables en este período.\n`;
-        } else {
-            content += `🏆 PRODUCTO MÁS RENTABLE\n`;
-            content += '-'.repeat(80) + '\n';
-            content += `Producto:        ${data.mostProfitable.name}\n`;
-            content += `Cantidad vendida: ${data.mostProfitable.quantitySold}\n`;
-            content += `Total vendido:   ${formatCurrency(data.mostProfitable.totalSales)}\n`;
-            content += `Costo producción: ${formatCurrency(data.mostProfitable.productionCost)}\n`;
-            content += `Ganancia total:  ${formatCurrency(data.mostProfitable.profit)}\n\n`;
-        }
-
-        // Ranking completo
-        content += `RANKING COMPLETO DE PRODUCTOS\n`;
-        content += '-'.repeat(80) + '\n';
-        content += `Pos. | Producto              | Vendidos | Total Ventas | Costo Prod. | Ganancia\n`;
-        content += '-'.repeat(80) + '\n';
-        data.allProducts.forEach((product, idx) => {
-            content += `${String(idx + 1).padStart(4)} | ${product.name.padEnd(20)} | ${String(product.quantitySold).padEnd(8)} | ${formatCurrency(product.totalSales).padEnd(12)} | ${formatCurrency(product.productionCost).padEnd(11)} | ${formatCurrency(product.profit)}\n`;
-        });
-
-        downloadTextFile(content, `Producto_Mas_Rentable_${data.period.start}_${data.period.end}.txt`);
-    };
-
-    const downloadTextFile = (content, filename) => {
-        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    };
 
     const renderReportData = () => {
         if (!reportData) return null;
@@ -590,19 +365,23 @@ const ReportModal = ({ report, onClose }) => {
 
                 {/* Body */}
                 <div className="p-6 space-y-6">
-                    <div>
-                        <h4 className="font-semibold text-brand-coffee mb-2">Descripción</h4>
-                        <p className="text-sm text-gray-600 leading-relaxed">{report.details}</p>
-                    </div>
+                    {!reportData && (
+                        <>
+                            <div>
+                                <h4 className="font-semibold text-brand-coffee mb-2">Descripción</h4>
+                                <p className="text-sm text-gray-600 leading-relaxed">{report.details}</p>
+                            </div>
 
-                    <div>
-                        <h4 className="font-semibold text-brand-coffee mb-2">Datos Incluidos</h4>
-                        <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-                            {report.dataPoints.map((point, idx) => (
-                                <li key={idx}>{point}</li>
-                            ))}
-                        </ul>
-                    </div>
+                            <div>
+                                <h4 className="font-semibold text-brand-coffee mb-2">Datos Incluidos</h4>
+                                <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
+                                    {report.dataPoints.map((point, idx) => (
+                                        <li key={idx}>{point}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </>
+                    )}
 
                     {/* Controls */}
                     <div className="bg-gray-50 p-4 rounded-xl space-y-4">
@@ -674,7 +453,7 @@ const ReportModal = ({ report, onClose }) => {
                                 </>
                             ) : (
                                 <>
-                                    <FileText size={20} className="mr-2" />
+                                    <Download size={20} className="mr-2" />
                                     Descargar Reporte Detallado
                                 </>
                             )}
@@ -694,7 +473,7 @@ const ReportModal = ({ report, onClose }) => {
                             </>
                         ) : (
                             <>
-                                <Download size={20} className="mr-2" />
+                                <FileText size={20} className="mr-2" />
                                 Generar Reporte
                             </>
                         )}

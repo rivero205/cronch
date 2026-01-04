@@ -1,8 +1,8 @@
-const pool = require('../db');
+const sql = require('../db');
 
 class ReportRepository {
-    async getProductProfitability(startDate, endDate) {
-        const [rows] = await pool.query(`
+    async getProductProfitability(userId, businessId, startDate, endDate) {
+        const result = await sql`
             SELECT 
                 p.id,
                 p.name,
@@ -11,13 +11,14 @@ class ReportRepository {
                 COALESCE(SUM(dp.quantity * dp.unit_cost), 0) as production_cost,
                 COALESCE(SUM(ds.quantity * ds.unit_price) - SUM(dp.quantity * dp.unit_cost), 0) as profit
             FROM products p
-            LEFT JOIN daily_sales ds ON p.id = ds.product_id AND ds.date BETWEEN ? AND ?
-            LEFT JOIN daily_production dp ON p.id = dp.product_id AND dp.date BETWEEN ? AND ?
+            LEFT JOIN daily_sales ds ON p.id = ds.product_id AND ds.date BETWEEN ${startDate} AND ${endDate} AND ds.business_id = ${businessId}
+            LEFT JOIN daily_production dp ON p.id = dp.product_id AND dp.date BETWEEN ${startDate} AND ${endDate} AND dp.business_id = ${businessId}
+            WHERE p.business_id = ${businessId}
             GROUP BY p.id, p.name
             ORDER BY profit DESC
-        `, [startDate, endDate, startDate, endDate]);
-        
-        return rows.map(row => ({
+        `;
+
+        return result.map(row => ({
             id: row.id,
             name: row.name,
             quantitySold: Number(row.quantity_sold),
@@ -27,30 +28,30 @@ class ReportRepository {
         }));
     }
 
-    async getDailyTrend(startDate, endDate) {
-        const [rows] = await pool.query(`
+    async getDailyTrend(userId, businessId, startDate, endDate) {
+        const result = await sql`
             SELECT 
                 dates.date,
                 COALESCE(SUM(ds.quantity * ds.unit_price), 0) as sales,
-                COALESCE(expenses.total, 0) as expenses,
-                COALESCE(SUM(ds.quantity * ds.unit_price), 0) - COALESCE(expenses.total, 0) as profit
+                COALESCE(MAX(expenses.total), 0) as expenses,
+                COALESCE(SUM(ds.quantity * ds.unit_price), 0) - COALESCE(MAX(expenses.total), 0) as profit
             FROM (
-                SELECT DISTINCT date FROM daily_sales WHERE date BETWEEN ? AND ?
+                SELECT DISTINCT date FROM daily_sales WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
                 UNION
-                SELECT DISTINCT date FROM expenses WHERE date BETWEEN ? AND ?
+                SELECT DISTINCT date FROM expenses WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
             ) as dates
-            LEFT JOIN daily_sales ds ON dates.date = ds.date
+            LEFT JOIN daily_sales ds ON dates.date = ds.date AND ds.business_id = ${businessId}
             LEFT JOIN (
                 SELECT date, SUM(amount) as total 
                 FROM expenses 
-                WHERE date BETWEEN ? AND ?
+                WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
                 GROUP BY date
             ) as expenses ON dates.date = expenses.date
             GROUP BY dates.date
             ORDER BY dates.date ASC
-        `, [startDate, endDate, startDate, endDate, startDate, endDate]);
+        `;
 
-        return rows.map(row => ({
+        return result.map(row => ({
             date: row.date,
             sales: Number(row.sales),
             expenses: Number(row.expenses),
@@ -58,8 +59,8 @@ class ReportRepository {
         }));
     }
 
-    async getMostProfitableProduct(startDate, endDate) {
-        const [rows] = await pool.query(`
+    async getMostProfitableProduct(userId, businessId, startDate, endDate) {
+        const result = await sql`
             SELECT 
                 p.id,
                 p.name,
@@ -68,33 +69,34 @@ class ReportRepository {
                 COALESCE(SUM(dp.quantity * dp.unit_cost), 0) as production_cost,
                 COALESCE(SUM(ds.quantity * ds.unit_price) - SUM(dp.quantity * dp.unit_cost), 0) as profit
             FROM products p
-            LEFT JOIN daily_sales ds ON p.id = ds.product_id AND ds.date BETWEEN ? AND ?
-            LEFT JOIN daily_production dp ON p.id = dp.product_id AND dp.date BETWEEN ? AND ?
+            LEFT JOIN daily_sales ds ON p.id = ds.product_id AND ds.date BETWEEN ${startDate} AND ${endDate} AND ds.business_id = ${businessId}
+            LEFT JOIN daily_production dp ON p.id = dp.product_id AND dp.date BETWEEN ${startDate} AND ${endDate} AND dp.business_id = ${businessId}
+            WHERE p.business_id = ${businessId}
             GROUP BY p.id, p.name
-            HAVING profit > 0
+            HAVING COALESCE(SUM(ds.quantity * ds.unit_price) - SUM(dp.quantity * dp.unit_cost), 0) > 0
             ORDER BY profit DESC
             LIMIT 1
-        `, [startDate, endDate, startDate, endDate]);
+        `;
 
-        if (rows.length === 0) {
+        if (result.length === 0) {
             return null;
         }
 
         return {
-            id: rows[0].id,
-            name: rows[0].name,
-            quantitySold: Number(rows[0].quantity_sold),
-            totalSales: Number(rows[0].total_sales),
-            productionCost: Number(rows[0].production_cost),
-            profit: Number(rows[0].profit)
+            id: result[0].id,
+            name: result[0].name,
+            quantitySold: Number(result[0].quantity_sold),
+            totalSales: Number(result[0].total_sales),
+            productionCost: Number(result[0].production_cost),
+            profit: Number(result[0].profit)
         };
     }
 
     // ========== DETAILED REPORTS FOR DOWNLOAD ==========
 
-    async getDetailedWeeklyReport(startDate, endDate) {
+    async getDetailedWeeklyReport(userId, businessId, startDate, endDate) {
         // Datos diarios de ventas
-        const [dailySales] = await pool.query(`
+        const salesResult = await sql`
             SELECT 
                 ds.date,
                 p.name as product_name,
@@ -103,59 +105,53 @@ class ReportRepository {
                 (ds.quantity * ds.unit_price) as total
             FROM daily_sales ds
             JOIN products p ON ds.product_id = p.id
-            WHERE ds.date BETWEEN ? AND ?
+            WHERE ds.business_id = ${businessId} AND ds.date BETWEEN ${startDate} AND ${endDate}
             ORDER BY ds.date ASC, p.name ASC
-        `, [startDate, endDate]);
+        `;
 
         // Datos diarios de gastos
-        const [dailyExpenses] = await pool.query(`
+        const expensesResult = await sql`
             SELECT date, description, amount
             FROM expenses
-            WHERE date BETWEEN ? AND ?
+            WHERE user_id = ${userId} AND date BETWEEN ${startDate} AND ${endDate}
             ORDER BY date ASC
-        `, [startDate, endDate]);
+        `;
 
-        // Resumen por día
-        const [dailySummary] = await pool.query(`
+        // Resumen por día (PostgreSQL date series generation)
+        const summaryResult = await sql`
             SELECT 
                 dates.date,
                 COALESCE(SUM(ds.quantity * ds.unit_price), 0) as sales,
-                COALESCE(expenses.total, 0) as expenses,
-                COALESCE(SUM(ds.quantity * ds.unit_price), 0) - COALESCE(expenses.total, 0) as profit
+                COALESCE(MAX(expenses.total), 0) as expenses,
+                COALESCE(SUM(ds.quantity * ds.unit_price), 0) - COALESCE(MAX(expenses.total), 0) as profit
             FROM (
-                SELECT DISTINCT date FROM daily_sales WHERE date BETWEEN ? AND ?
-                UNION
-                SELECT DISTINCT date FROM expenses WHERE date BETWEEN ? AND ?
-                UNION
-                SELECT DATE_ADD(?, INTERVAL n DAY) as date
-                FROM (SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) nums
-                WHERE DATE_ADD(?, INTERVAL n DAY) <= ?
+                SELECT generate_series(${startDate}::date, ${endDate}::date, '1 day'::interval)::date as date
             ) as dates
-            LEFT JOIN daily_sales ds ON dates.date = ds.date
+            LEFT JOIN daily_sales ds ON dates.date = ds.date AND ds.business_id = ${businessId}
             LEFT JOIN (
                 SELECT date, SUM(amount) as total 
                 FROM expenses 
-                WHERE date BETWEEN ? AND ?
+                WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
                 GROUP BY date
             ) as expenses ON dates.date = expenses.date
             GROUP BY dates.date
             ORDER BY dates.date ASC
-        `, [startDate, endDate, startDate, endDate, startDate, startDate, endDate, startDate, endDate]);
+        `;
 
         return {
-            dailySales: dailySales.map(row => ({
+            dailySales: salesResult.map(row => ({
                 date: row.date,
                 productName: row.product_name,
                 quantity: Number(row.quantity),
                 unitPrice: Number(row.unit_price),
                 total: Number(row.total)
             })),
-            dailyExpenses: dailyExpenses.map(row => ({
+            dailyExpenses: expensesResult.map(row => ({
                 date: row.date,
                 description: row.description,
                 amount: Number(row.amount)
             })),
-            dailySummary: dailySummary.map(row => ({
+            dailySummary: summaryResult.map(row => ({
                 date: row.date,
                 sales: Number(row.sales),
                 expenses: Number(row.expenses),
@@ -164,9 +160,9 @@ class ReportRepository {
         };
     }
 
-    async getDetailedMonthlyReport(startDate, endDate) {
+    async getDetailedMonthlyReport(userId, businessId, startDate, endDate) {
         // Datos diarios de ventas
-        const [dailySales] = await pool.query(`
+        const salesResult = await sql`
             SELECT 
                 ds.date,
                 p.name as product_name,
@@ -175,20 +171,20 @@ class ReportRepository {
                 (ds.quantity * ds.unit_price) as total
             FROM daily_sales ds
             JOIN products p ON ds.product_id = p.id
-            WHERE ds.date BETWEEN ? AND ?
+            WHERE ds.business_id = ${businessId} AND ds.date BETWEEN ${startDate} AND ${endDate}
             ORDER BY ds.date ASC, p.name ASC
-        `, [startDate, endDate]);
+        `;
 
         // Datos diarios de gastos
-        const [dailyExpenses] = await pool.query(`
+        const expensesResult = await sql`
             SELECT date, description, amount
             FROM expenses
-            WHERE date BETWEEN ? AND ?
+            WHERE user_id = ${userId} AND date BETWEEN ${startDate} AND ${endDate}
             ORDER BY date ASC
-        `, [startDate, endDate]);
+        `;
 
         // Datos diarios de producción
-        const [dailyProduction] = await pool.query(`
+        const productionResult = await sql`
             SELECT 
                 dp.date,
                 p.name as product_name,
@@ -197,74 +193,74 @@ class ReportRepository {
                 (dp.quantity * dp.unit_cost) as total_cost
             FROM daily_production dp
             JOIN products p ON dp.product_id = p.id
-            WHERE dp.date BETWEEN ? AND ?
+            WHERE dp.business_id = ${businessId} AND dp.date BETWEEN ${startDate} AND ${endDate}
             ORDER BY dp.date ASC, p.name ASC
-        `, [startDate, endDate]);
+        `;
 
         // Resumen por día
-        const [dailySummary] = await pool.query(`
+        const summaryResult = await sql`
             SELECT 
                 dates.date,
                 COALESCE(SUM(ds.quantity * ds.unit_price), 0) as sales,
                 COALESCE(MAX(expenses.total), 0) as expenses,
                 COALESCE(SUM(ds.quantity * ds.unit_price), 0) - COALESCE(MAX(expenses.total), 0) as profit
             FROM (
-                SELECT DISTINCT date FROM daily_sales WHERE date BETWEEN ? AND ?
+                SELECT DISTINCT date FROM daily_sales WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
                 UNION
-                SELECT DISTINCT date FROM expenses WHERE date BETWEEN ? AND ?
+                SELECT DISTINCT date FROM expenses WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
             ) as dates
-            LEFT JOIN daily_sales ds ON dates.date = ds.date
+            LEFT JOIN daily_sales ds ON dates.date = ds.date AND ds.business_id = ${businessId}
             LEFT JOIN (
                 SELECT date, SUM(amount) as total 
                 FROM expenses 
-                WHERE date BETWEEN ? AND ?
+                WHERE business_id = ${businessId} AND date BETWEEN ${startDate} AND ${endDate}
                 GROUP BY date
             ) as expenses ON dates.date = expenses.date
             GROUP BY dates.date
             ORDER BY dates.date ASC
-        `, [startDate, endDate, startDate, endDate, startDate, endDate]);
+        `;
 
         // Resumen de productos más vendidos
-        const [topProducts] = await pool.query(`
+        const topProductsResult = await sql`
             SELECT 
                 p.name,
                 SUM(ds.quantity) as total_quantity,
                 SUM(ds.quantity * ds.unit_price) as total_revenue
             FROM daily_sales ds
             JOIN products p ON ds.product_id = p.id
-            WHERE ds.date BETWEEN ? AND ?
+            WHERE ds.business_id = ${businessId} AND ds.date BETWEEN ${startDate} AND ${endDate}
             GROUP BY p.id, p.name
             ORDER BY total_revenue DESC
             LIMIT 5
-        `, [startDate, endDate]);
+        `;
 
         return {
-            dailySales: dailySales.map(row => ({
+            dailySales: salesResult.map(row => ({
                 date: row.date,
                 productName: row.product_name,
                 quantity: Number(row.quantity),
                 unitPrice: Number(row.unit_price),
                 total: Number(row.total)
             })),
-            dailyExpenses: dailyExpenses.map(row => ({
+            dailyExpenses: expensesResult.map(row => ({
                 date: row.date,
                 description: row.description,
                 amount: Number(row.amount)
             })),
-            dailyProduction: dailyProduction.map(row => ({
+            dailyProduction: productionResult.map(row => ({
                 date: row.date,
                 productName: row.product_name,
                 quantity: Number(row.quantity),
                 unitCost: Number(row.unit_cost),
                 totalCost: Number(row.total_cost)
             })),
-            dailySummary: dailySummary.map(row => ({
+            dailySummary: summaryResult.map(row => ({
                 date: row.date,
                 sales: Number(row.sales),
                 expenses: Number(row.expenses),
                 profit: Number(row.profit)
             })),
-            topProducts: topProducts.map(row => ({
+            topProducts: topProductsResult.map(row => ({
                 name: row.name,
                 totalQuantity: Number(row.total_quantity),
                 totalRevenue: Number(row.total_revenue)
@@ -272,9 +268,9 @@ class ReportRepository {
         };
     }
 
-    async getDetailedProductProfitability(startDate, endDate) {
+    async getDetailedProductProfitability(userId, businessId, startDate, endDate) {
         // Ventas por producto por día
-        const [salesByDay] = await pool.query(`
+        const salesResult = await sql`
             SELECT 
                 ds.date,
                 p.name as product_name,
@@ -283,12 +279,12 @@ class ReportRepository {
                 (ds.quantity * ds.unit_price) as revenue
             FROM daily_sales ds
             JOIN products p ON ds.product_id = p.id
-            WHERE ds.date BETWEEN ? AND ?
+            WHERE ds.business_id = ${businessId} AND ds.date BETWEEN ${startDate} AND ${endDate}
             ORDER BY p.name ASC, ds.date ASC
-        `, [startDate, endDate]);
+        `;
 
         // Producción por producto por día
-        const [productionByDay] = await pool.query(`
+        const productionResult = await sql`
             SELECT 
                 dp.date,
                 p.name as product_name,
@@ -297,19 +293,19 @@ class ReportRepository {
                 (dp.quantity * dp.unit_cost) as cost
             FROM daily_production dp
             JOIN products p ON dp.product_id = p.id
-            WHERE dp.date BETWEEN ? AND ?
+            WHERE dp.business_id = ${businessId} AND dp.date BETWEEN ${startDate} AND ${endDate}
             ORDER BY p.name ASC, dp.date ASC
-        `, [startDate, endDate]);
+        `;
 
         return {
-            salesByDay: salesByDay.map(row => ({
+            salesByDay: salesResult.map(row => ({
                 date: row.date,
                 productName: row.product_name,
                 quantity: Number(row.quantity),
                 unitPrice: Number(row.unit_price),
                 revenue: Number(row.revenue)
             })),
-            productionByDay: productionByDay.map(row => ({
+            productionByDay: productionResult.map(row => ({
                 date: row.date,
                 productName: row.product_name,
                 quantity: Number(row.quantity),
