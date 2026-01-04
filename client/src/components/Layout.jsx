@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, ShoppingCart, Factory, DollarSign, User, LogOut, FileText, Package, Menu, X, AlertTriangle, Building2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import logo from '../assets/logo_compañia.png';
+import NotificationBell from './NotificationBell';
 
 // Logout Confirmation Modal
 const LogoutModal = ({ isOpen, onConfirm, onCancel }) => {
@@ -202,6 +203,8 @@ const Layout = ({ children }) => {
 
                 {/* Main Content Wrapper */}
                 <div className="flex-1 md:ml-64 flex flex-col min-h-screen overflow-x-hidden">
+
+
                     {/* Top Bar */}
                     <header className="bg-white shadow-sm sticky top-0 z-10 px-4 md:px-8 py-4 flex justify-between items-center">
                         {/* Mobile Menu Button */}
@@ -217,6 +220,9 @@ const Layout = ({ children }) => {
                         </h2>
 
                         <div className="flex items-center space-x-2 md:space-x-4">
+                            {/* Notification Bell */}
+                            <NotificationBell />
+
                             <Link to="/profile" className="flex items-center space-x-2 md:space-x-3 bg-brand-base px-3 md:px-4 py-2 rounded-full hover:bg-brand-orange/10 transition-colors">
                                 <div className="bg-brand-orange p-1.5 rounded-full text-white">
                                     <User size={18} className="md:w-5 md:h-5" />

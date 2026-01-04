@@ -40,12 +40,20 @@ class ProductRepository {
     }
 
     async delete(id, userId, businessId) {
-        const result = await sql`
-            DELETE FROM products 
-            WHERE id = ${id} AND business_id = ${businessId}
-            RETURNING id
-        `;
-        return result.length > 0;
+        try {
+            const result = await sql`
+                DELETE FROM products 
+                WHERE id = ${id} AND business_id = ${businessId}
+                RETURNING id
+            `;
+            return result.length > 0;
+        } catch (error) {
+            // Check if it's a foreign key constraint error
+            if (error.code === '23503') {
+                throw new Error('No se puede eliminar el producto porque está siendo usado en ventas o producción');
+            }
+            throw error;
+        }
     }
 }
 

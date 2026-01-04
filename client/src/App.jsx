@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Products from './pages/Products';
@@ -99,39 +100,39 @@ function AppRoutes() {
                 <Route path="/production" element={<Production />} />
                 <Route path="/sales" element={<Sales />} />
                 <Route path="/profile" element={<Profile />} />
-                
+
                 {/* Admin and Super Admin only routes */}
-                <Route 
-                  path="/reports" 
+                <Route
+                  path="/reports"
                   element={
                     <RoleProtectedRoute allowedRoles={['admin', 'super_admin']}>
                       <Reports />
                     </RoleProtectedRoute>
-                  } 
+                  }
                 />
-                <Route 
-                  path="/businesses" 
+                <Route
+                  path="/businesses"
                   element={
                     <RoleProtectedRoute allowedRoles={['admin']}>
                       <Businesses />
                     </RoleProtectedRoute>
-                  } 
+                  }
                 />
-                <Route 
-                  path="/businesses-admin" 
+                <Route
+                  path="/businesses-admin"
                   element={
                     <RoleProtectedRoute allowedRoles={['super_admin']}>
                       <BusinessesAdmin />
                     </RoleProtectedRoute>
-                  } 
+                  }
                 />
-                <Route 
-                  path="/users" 
+                <Route
+                  path="/users"
                   element={
                     <RoleProtectedRoute allowedRoles={['admin', 'super_admin']}>
                       <Users />
                     </RoleProtectedRoute>
-                  } 
+                  }
                 />
               </Routes>
             </Layout>
@@ -147,7 +148,9 @@ function App() {
     <Router>
       <AuthProvider>
         <ToastProvider>
-          <AppRoutes />
+          <NotificationProvider>
+            <AppRoutes />
+          </NotificationProvider>
         </ToastProvider>
       </AuthProvider>
     </Router>

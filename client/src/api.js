@@ -28,7 +28,11 @@ export const createProduct = async (productData) => {
         headers,
         body: JSON.stringify(productData),
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+        throw new Error(data.error || 'Error al crear producto');
+    }
+    return data;
 };
 
 export const updateProduct = async (id, productData) => {
@@ -38,7 +42,11 @@ export const updateProduct = async (id, productData) => {
         headers,
         body: JSON.stringify(productData),
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+        throw new Error(data.error || 'Error al actualizar producto');
+    }
+    return data;
 };
 
 export const deleteProduct = async (id) => {
@@ -47,7 +55,11 @@ export const deleteProduct = async (id) => {
         method: 'DELETE',
         headers,
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+        throw new Error(data.error || 'Error al eliminar producto');
+    }
+    return data;
 };
 
 // Expenses
@@ -84,7 +96,11 @@ export const deleteExpense = async (id) => {
         method: 'DELETE',
         headers,
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) {
+        throw new Error(data.error || 'Error al eliminar gasto');
+    }
+    return data;
 };
 
 // Production
@@ -162,37 +178,48 @@ export const deleteSale = async (id) => {
 };
 
 // Reports
-export const getWeeklyReport = async (date) => {
+// Reports - Updated to support optional businessId for Super Admin
+export const getWeeklyReport = async (date, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/weekly?date=${date}`, { headers });
+    let url = `${API_URL}/reports/weekly?date=${date}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.json();
 };
 
-export const getMonthlyReport = async (month) => {
+export const getMonthlyReport = async (month, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/monthly?month=${month}`, { headers });
+    let url = `${API_URL}/reports/monthly?month=${month}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.json();
 };
 
-export const getProductProfitability = async (startDate, endDate) => {
+export const getProductProfitability = async (startDate, endDate, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/product-profitability?startDate=${startDate}&endDate=${endDate}`, { headers });
+    let url = `${API_URL}/reports/product-profitability?startDate=${startDate}&endDate=${endDate}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.json();
 };
 
-export const getDailyTrend = async (startDate, endDate) => {
+export const getDailyTrend = async (startDate, endDate, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/daily-trend?startDate=${startDate}&endDate=${endDate}`, { headers });
+    let url = `${API_URL}/reports/daily-trend?startDate=${startDate}&endDate=${endDate}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.json();
 };
 
-export const getMostProfitable = async (startDate, endDate) => {
+export const getMostProfitable = async (startDate, endDate, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/most-profitable?startDate=${startDate}&endDate=${endDate}`, { headers });
+    let url = `${API_URL}/reports/most-profitable?startDate=${startDate}&endDate=${endDate}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.json();
 };
 
-export const getDailyReport = async (date, startDate = null, endDate = null) => {
+export const getDailyReport = async (date, startDate = null, endDate = null, businessId = null) => {
     const headers = await getAuthHeaders();
     let url = `${API_URL}/reports/daily`;
 
@@ -202,38 +229,63 @@ export const getDailyReport = async (date, startDate = null, endDate = null) => 
         url += `?date=${date}`;
     }
 
+    if (businessId) url += `${url.includes('?') ? '&' : '?'}businessId=${businessId}`;
+
     const res = await fetch(url, { headers });
     return res.json();
 };
 
+// Super Admin Global Reports
+export const getGlobalSummary = async (startDate, endDate) => {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_URL}/reports/admin/global-summary?startDate=${startDate}&endDate=${endDate}`, { headers });
+    return res.json();
+};
+
+export const getBusinessRanking = async (startDate, endDate, maxResults = 10) => {
+    const headers = await getAuthHeaders();
+    const res = await fetch(`${API_URL}/reports/admin/ranking?startDate=${startDate}&endDate=${endDate}&maxResults=${maxResults}`, { headers });
+    return res.json();
+};
+
 // Download Reports
-export const getDetailedWeeklyReport = async (date) => {
+export const getDetailedWeeklyReport = async (date, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/download/weekly?date=${date}`, { headers });
+    let url = `${API_URL}/reports/download/weekly?date=${date}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.blob();
 };
 
-export const getDetailedMonthlyReport = async (month) => {
+export const getDetailedMonthlyReport = async (month, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/download/monthly?month=${month}`, { headers });
+    let url = `${API_URL}/reports/download/monthly?month=${month}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.blob();
 };
 
-export const getDetailedProductProfitability = async (startDate, endDate) => {
+export const getDetailedProductProfitability = async (startDate, endDate, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/download/product-profitability?startDate=${startDate}&endDate=${endDate}`, { headers });
+    let url = `${API_URL}/reports/download/product-profitability?startDate=${startDate}&endDate=${endDate}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.blob();
 };
 
-export const getDetailedDailyTrend = async (startDate, endDate) => {
+export const getDetailedDailyTrend = async (startDate, endDate, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/download/daily-trend?startDate=${startDate}&endDate=${endDate}`, { headers });
+    let url = `${API_URL}/reports/download/daily-trend?startDate=${startDate}&endDate=${endDate}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.blob();
 };
 
-export const getDetailedMostProfitable = async (startDate, endDate) => {
+export const getDetailedMostProfitable = async (startDate, endDate, businessId = null) => {
     const headers = await getAuthHeaders();
-    const res = await fetch(`${API_URL}/reports/download/most-profitable?startDate=${startDate}&endDate=${endDate}`, { headers });
+    let url = `${API_URL}/reports/download/most-profitable?startDate=${startDate}&endDate=${endDate}`;
+    if (businessId) url += `&businessId=${businessId}`;
+    const res = await fetch(url, { headers });
     return res.blob();
 };
 
@@ -270,6 +322,8 @@ export const api = {
     getDetailedProductProfitability,
     getDetailedDailyTrend,
     getDetailedMostProfitable,
+    getGlobalSummary,
+    getBusinessRanking,
     // Business & Users
     getBusinesses: async () => {
         // Public route for registration, no auth headers needed
@@ -339,7 +393,7 @@ export const api = {
     // User Management (Admin/Super Admin)
     updateUserRole: async (userId, role) => {
         const { data: { session } } = await supabase.auth.getSession();
-        
+
         if (!session) {
             throw new Error('No hay sesión activa');
         }
@@ -381,6 +435,19 @@ export const api = {
             body: JSON.stringify({ businessId }),
         });
         return res.json();
+    },
+    // Daily Closing
+    performDailyClosing: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('No hay sesión activa');
+
+        // We call the Supabase RPC function directly or via our backend if preferred.
+        // Direct RPC call is simpler for this single function.
+        const { data, error } = await supabase
+            .rpc('perform_daily_closing', { p_business_id: session.user.user_metadata.business_id });
+
+        if (error) throw error;
+        return data;
     }
 };
 

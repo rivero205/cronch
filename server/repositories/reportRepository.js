@@ -314,6 +314,65 @@ class ReportRepository {
             }))
         };
     }
+
+    // ========== SUPER ADMIN GLOBAL REPORTS ==========
+
+    async getGlobalSummary(startDate, endDate) {
+        const result = await sql`
+            SELECT 
+                COALESCE(SUM(ds.quantity * ds.unit_price), 0) as total_sales,
+                COALESCE((
+                    SELECT SUM(amount) FROM expenses WHERE date BETWEEN ${startDate} AND ${endDate}
+                ), 0) as total_expenses,
+                COALESCE(SUM(ds.quantity * ds.unit_price), 0) - COALESCE((
+                    SELECT SUM(amount) FROM expenses WHERE date BETWEEN ${startDate} AND ${endDate}
+                ), 0) as total_profit,
+                COUNT(DISTINCT ds.business_id) as active_businesses
+            FROM daily_sales ds
+            WHERE ds.date BETWEEN ${startDate} AND ${endDate}
+        `;
+
+        const row = result[0];
+        return {
+            totalSales: Number(row.total_sales),
+            totalExpenses: Number(row.total_expenses),
+            totalProfit: Number(row.total_profit),
+            activeBusinesses: Number(row.active_businesses)
+        };
+    }
+
+    async getBusinessRanking(startDate, endDate, maxResults = 10) {
+        const result = await sql`
+            WITH BusinessStats AS (
+                SELECT 
+                    b.id,
+                    b.name,
+                    COALESCE(SUM(ds.quantity * ds.unit_price), 0) as sales,
+                    COALESCE((
+                        SELECT SUM(e.amount) 
+                        FROM expenses e 
+                        WHERE e.business_id = b.id AND e.date BETWEEN ${startDate} AND ${endDate}
+                    ), 0) as expenses
+                FROM businesses b
+                LEFT JOIN daily_sales ds ON b.id = ds.business_id AND ds.date BETWEEN ${startDate} AND ${endDate}
+                GROUP BY b.id, b.name
+            )
+            SELECT 
+                *,
+                (sales - expenses) as profit
+            FROM BusinessStats
+            ORDER BY sales DESC
+            LIMIT ${maxResults}
+        `;
+
+        return result.map(row => ({
+            id: row.id,
+            name: row.name,
+            sales: Number(row.sales),
+            expenses: Number(row.expenses),
+            profit: Number(row.profit)
+        }));
+    }
 }
 
 module.exports = new ReportRepository();

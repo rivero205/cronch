@@ -2,8 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { api } from '../api';
-import StatCard from '../components/StatCard';
-import { TrendingUp, TrendingDown, Calendar, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+    TrendingUp,
+    DollarSign,
+    ShoppingBag,
+    Activity,
+    Calendar,
+    RefreshCw,
+    Package
+} from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 const PERIODS = {
     today: { label: 'Hoy', value: 'today' },
@@ -12,15 +20,12 @@ const PERIODS = {
 };
 
 const Dashboard = () => {
-    const [report, setReport] = useState(null);
+    const { toast } = useToast();
     const [loading, setLoading] = useState(true);
-    const [selectedPeriod, setSelectedPeriod] = useState('week'); // Default to week
-    const [error, setError] = useState(null);
+    const [report, setReport] = useState(null);
+    const [selectedPeriod, setSelectedPeriod] = useState('week');
 
-    useEffect(() => {
-        fetchReport();
-    }, [selectedPeriod]);
-
+    // Date Calculation Logic
     const getDateRange = () => {
         const now = new Date();
 
@@ -45,21 +50,6 @@ const Dashboard = () => {
         }
     };
 
-    const fetchReport = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const { date, startDate, endDate } = getDateRange();
-            const data = await api.getDailyReport(date, startDate, endDate);
-            setReport(data);
-        } catch (err) {
-            console.error('Error loading dashboard:', err);
-            setError('Error al cargar los datos');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const getPeriodLabel = () => {
         const { date, startDate, endDate } = getDateRange();
         if (date) {
@@ -71,36 +61,56 @@ const Dashboard = () => {
         return '';
     };
 
+    useEffect(() => {
+        fetchDashboardData();
+    }, [selectedPeriod]);
+
+    const fetchDashboardData = async () => {
+        try {
+            setLoading(true);
+            const { date, startDate, endDate } = getDateRange();
+            // Use getDailyReport which handles both single date and range
+            const data = await api.getDailyReport(date, startDate, endDate);
+            setReport(data);
+        } catch (error) {
+            console.error('Error loading dashboard:', error);
+            toast?.error('Error al cargar datos del dashboard');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(amount || 0);
+    };
+
     if (loading) {
         return (
-            <div className="flex items-center justify-center p-12">
-                <RefreshCw className="animate-spin text-brand-gold mr-2" size={24} />
-                <span className="text-brand-gray">Cargando datos...</span>
+            <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-orange"></div>
             </div>
         );
     }
 
-    if (error) {
-        return (
-            <div className="p-6 bg-red-50 text-red-700 rounded-lg flex items-center">
-                <AlertCircle className="mr-2" size={20} />
-                {error}
-            </div>
-        );
-    }
-
-    const hasData = report && (report.totalSales > 0 || report.totalExpenses > 0);
-    const profitClass = report?.dailyProfit >= 0 ? 'success' : 'danger';
-    const profitLabel = report?.dailyProfit >= 0 ? 'Ganancia' : 'Pérdida';
-    const isRange = selectedPeriod !== 'today';
+    // Prepare data
+    const totalSales = report?.totalSales || 0;
+    const totalExpenses = report?.totalExpenses || 0;
+    // For single day, dailyProfit is just profit. For range, it's also total profit in this object structure.
+    const totalProfit = report?.dailyProfit || 0;
+    const topProducts = report?.topProducts || [];
 
     return (
-        <div className="space-y-6">
-            {/* Header with Period Selector */}
+        <div className="space-y-8 animate-fadeIn">
+            {/* Header with Selector */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-xl font-bold text-brand-dark">Dashboard</h2>
-                    <p className="text-sm text-brand-gray flex items-center mt-1">
+                    <h2 className="text-2xl font-bold text-brand-coffee">Dashboard</h2>
+                    <p className="text-sm text-gray-500 flex items-center mt-1">
                         <Calendar size={14} className="mr-1" />
                         {getPeriodLabel()}
                     </p>
@@ -108,14 +118,14 @@ const Dashboard = () => {
 
                 <div className="flex items-center gap-2">
                     {/* Period Selector */}
-                    <div className="bg-white rounded-lg shadow-sm p-1 flex">
+                    <div className="bg-white rounded-lg shadow-sm p-1 flex border border-gray-100">
                         {Object.values(PERIODS).map((period) => (
                             <button
                                 key={period.value}
                                 onClick={() => setSelectedPeriod(period.value)}
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selectedPeriod === period.value
-                                        ? 'bg-brand-gold text-white'
-                                        : 'text-brand-gray hover:text-brand-dark hover:bg-gray-50'
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${selectedPeriod === period.value
+                                    ? 'bg-brand-orange text-white shadow-sm'
+                                    : 'text-gray-500 hover:text-brand-coffee hover:bg-gray-50'
                                     }`}
                             >
                                 {period.label}
@@ -124,8 +134,8 @@ const Dashboard = () => {
                     </div>
 
                     <button
-                        onClick={fetchReport}
-                        className="p-2 text-brand-gray hover:text-brand-gold transition-colors"
+                        onClick={fetchDashboardData}
+                        className="p-2 text-gray-400 hover:text-brand-orange transition-colors"
                         title="Actualizar"
                     >
                         <RefreshCw size={20} />
@@ -133,113 +143,120 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {/* Empty State */}
-            {!hasData && (
-                <div className="bg-blue-50 text-blue-800 p-6 rounded-lg">
-                    <div className="flex items-start">
-                        <AlertCircle className="mr-3 mt-0.5 flex-shrink-0" size={20} />
-                        <div>
-                            <p className="font-medium">No hay datos para este período</p>
-                            <p className="text-sm mt-1 opacity-80">
-                                {selectedPeriod === 'today'
-                                    ? 'No se han registrado ventas ni gastos hoy. Prueba viendo "Esta Semana" para ver datos anteriores.'
-                                    : 'Empieza registrando Insumos, luego Producción y finalmente Ventas.'}
-                            </p>
-                            {selectedPeriod === 'today' && (
-                                <button
-                                    onClick={() => setSelectedPeriod('week')}
-                                    className="mt-3 text-sm bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded-md transition-colors"
-                                >
-                                    Ver Esta Semana
-                                </button>
-                            )}
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Sales Card */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-brand-gray/10 relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <DollarSign size={60} className="text-green-600" />
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-green-100 rounded-lg text-green-600">
+                            <TrendingUp size={20} />
                         </div>
+                        <h3 className="text-sm font-semibold text-brand-coffee">Ventas Totales</h3>
                     </div>
+                    <p className="text-2xl font-bold text-brand-coffee">
+                        {formatCurrency(totalSales)}
+                    </p>
                 </div>
-            )}
 
-            {/* Stats Grid */}
-            {hasData && (
-                <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <StatCard
-                            title="Ventas Totales"
-                            value={`$${report.totalSales?.toLocaleString() || 0}`}
-                            type="warning"
-                            subtext={isRange && report.dailyAverageSales
-                                ? `Promedio: $${Math.round(report.dailyAverageSales).toLocaleString()}/día`
-                                : null}
-                        />
-                        <StatCard
-                            title="Gastos Totales"
-                            value={`$${report.totalExpenses?.toLocaleString() || 0}`}
-                            type="default"
-                        />
-                        <StatCard
-                            title={`${profitLabel} Neta`}
-                            value={`$${Math.abs(report.dailyProfit || 0).toLocaleString()}`}
-                            type={profitClass}
-                            subtext={isRange && report.dailyAverageProfit
-                                ? `Promedio: $${Math.round(Math.abs(report.dailyAverageProfit)).toLocaleString()}/día`
-                                : "Ventas - Gastos"}
-                        />
+                {/* Expenses Card */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-brand-gray/10 relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <ShoppingBag size={60} className="text-red-600" />
                     </div>
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-red-100 rounded-lg text-red-600">
+                            <Activity size={20} />
+                        </div>
+                        <h3 className="text-sm font-semibold text-brand-coffee">Gastos & Costos</h3>
+                    </div>
+                    <p className="text-2xl font-bold text-brand-coffee">
+                        {formatCurrency(totalExpenses)}
+                    </p>
+                </div>
 
-                    {/* Period Summary */}
-                    {isRange && report.daysInPeriod && (
-                        <div className="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
-                            <span className="text-sm text-brand-gray">
-                                Período de <strong className="text-brand-dark">{report.daysInPeriod} días</strong>
-                            </span>
-                            <div className="flex items-center">
-                                {report.dailyProfit >= 0 ? (
-                                    <TrendingUp className="text-green-500 mr-1" size={18} />
-                                ) : (
-                                    <TrendingDown className="text-red-500 mr-1" size={18} />
-                                )}
-                                <span className={`text-sm font-medium ${report.dailyProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {report.dailyProfit >= 0 ? 'En ganancia' : 'En pérdida'}
-                                </span>
-                            </div>
+                {/* Profit Card */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-brand-gray/10 relative overflow-hidden group hover:shadow-md transition-all">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Activity size={60} className="text-brand-orange" />
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-orange-100 rounded-lg text-brand-orange">
+                            <DollarSign size={20} />
+                        </div>
+                        <h3 className="text-sm font-semibold text-brand-coffee">Ganancia Neta</h3>
+                    </div>
+                    <p className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-brand-coffee' : 'text-red-600'}`}>
+                        {formatCurrency(totalProfit)}
+                    </p>
+                </div>
+            </div>
+
+            {/* Ranking Table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-brand-gray/10 overflow-hidden">
+                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-brand-coffee flex items-center gap-2">
+                        <Package className="text-brand-orange" size={20} />
+                        Ranking de Productos
+                    </h3>
+                    <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                        Top {topProducts.length}
+                    </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-brand-coffee uppercase tracking-wider"># Rank</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-brand-coffee uppercase tracking-wider">Producto</th>
+                                <th className="px-6 py-4 text-right text-xs font-bold text-brand-coffee uppercase tracking-wider">Cantidad</th>
+                                <th className="px-6 py-4 text-right text-xs font-bold text-brand-coffee uppercase tracking-wider">Total Vendido</th>
+                                <th className="px-6 py-4 text-center text-xs font-bold text-brand-coffee uppercase tracking-wider">Contribución</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {topProducts.map((product, index) => {
+                                const contribution = totalSales > 0 ? (Number(product.sales_amount) / totalSales) * 100 : 0;
+                                return (
+                                    <tr key={index} className="hover:bg-gray-50/50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm
+                                                ${index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                                                    index === 1 ? 'bg-gray-100 text-gray-700' :
+                                                        index === 2 ? 'bg-orange-100 text-orange-800' : 'text-gray-500'}
+                                            `}>
+                                                {index + 1}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-semibold text-brand-coffee">{product.name}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600 font-medium">
+                                            {product.quantity_sold}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-green-600">
+                                            {formatCurrency(Number(product.sales_amount))}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                                            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
+                                                {contribution.toFixed(1)}%
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    {topProducts.length === 0 && (
+                        <div className="p-8 text-center text-gray-500">
+                            No hay productos vendidos en este período.
                         </div>
                     )}
-
-                    {/* Top Products */}
-                    <div className="bg-white rounded-lg shadow-sm p-6">
-                        <h3 className="text-lg font-bold text-brand-dark mb-4 flex items-center">
-                            <TrendingUp className="mr-2 text-brand-gold" size={20} />
-                            Productos Más Vendidos
-                        </h3>
-
-                        {(!report.topProducts || report.topProducts.length === 0) ? (
-                            <p className="text-brand-gray italic">No hay ventas registradas en este período.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left text-brand-dark">
-                                    <thead className="text-xs text-brand-gray uppercase bg-gray-50 border-b">
-                                        <tr>
-                                            <th className="px-4 py-3">Producto</th>
-                                            <th className="px-4 py-3 text-right">Cantidad</th>
-                                            <th className="px-4 py-3 text-right">Total Vendido</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {report.topProducts.map((p, index) => (
-                                            <tr key={index} className="border-b hover:bg-gray-50">
-                                                <td className="px-4 py-3 font-medium">{p.name}</td>
-                                                <td className="px-4 py-3 text-right">{p.quantity_sold}</td>
-                                                <td className="px-4 py-3 text-right font-semibold text-brand-gold">
-                                                    ${Number(p.sales_amount).toLocaleString()}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                </>
-            )}
+                </div>
+            </div>
         </div>
     );
 };

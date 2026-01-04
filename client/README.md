@@ -1,16 +1,55 @@
-# React + Vite
+# Cronch - Frontend (PWA)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interfaz de usuario moderna y responsiva construida con React para la gestión de negocios de alimentos y manufactura.
 
-Currently, two official plugins are available:
+## ✨ Características
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Dashboard Real-time**: Visualización de KPIs y ranking de productos.
+- **PWA (Progressive Web App)**: Instalable en PC y móviles como una aplicación nativa.
+- **Notificaciones**: Sistema de alertas nativas (Browser Notifications) para ventas y recordatorios.
+- **Reporting Avanzado**: Gráficos interactivos y filtros por fecha.
+- **Gestión Multi-negocio**: Soporte para Super Admins y aislamiento de datos por empresa.
 
-## React Compiler
+## 🛠️ Tecnologías
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 18** + **Vite**
+- **Tailwind CSS** (Diseño moderno y responsivo)
+- **Lucide React** (Iconografía)
+- **Context API** (Gestión de Auth, Toasts y Notificaciones)
+- **Supabase Client** (Autenticación y Realtime)
+- **Date-fns** (Manipulación de fechas)
 
-## Expanding the ESLint configuration
+## 🚀 Instalación y Desarrollo
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Requisitos previos
+- Node.js (v16+)
+
+### Pasos
+1. Entrar al directorio:
+   ```bash
+   cd client
+   ```
+2. Instalar dependencias:
+   ```bash
+   npm install
+   ```
+3. Configurar variables de entorno (`.env`):
+   ```env
+   VITE_SUPABASE_URL=tu_supabase_url
+   VITE_SUPABASE_ANON_KEY=tu_supabase_anon_key
+   VITE_API_URL=http://localhost:3000/api
+   ```
+4. Iniciar servidor de desarrollo:
+   ```bash
+   npm run dev
+   ```
+
+## 📱 PWA & Service Workers
+La aplicación incluye un `manifest.json` y un Service Worker (`sw.js`) para permitir la instalación y el manejo de notificaciones en segundo plano.
+
+## 📁 Estructura del Proyecto
+- `src/components`: Componentes reutilizables de UI.
+- `src/contexts`: Proveedores de estado global (Auth, Notifications).
+- `src/pages`: Vistas principales de la aplicación.
+- `src/lib`: Configuraciones de librerías externas (Supabase).
+- `public/AppIcons`: Recursos visuales oficiales para la instalación en dispositivos.

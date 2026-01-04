@@ -294,6 +294,23 @@ class ReportService {
             allProducts: allProducts,
             message: product ? undefined : 'No hay productos rentables en este período'
         };
+    };
+
+
+    // ========== SUPER ADMIN GLOBAL REPORTS ==========
+
+    async getGlobalSummary(startDate, endDate) {
+        if (!startDate || !endDate) {
+            throw new Error('Start and end dates are required');
+        }
+        return await reportRepository.getGlobalSummary(startDate, endDate);
+    }
+
+    async getBusinessRanking(startDate, endDate, maxResults) {
+        if (!startDate || !endDate) {
+            throw new Error('Start and end dates are required');
+        }
+        return await reportRepository.getBusinessRanking(startDate, endDate, maxResults);
     }
 
     // ========== EXCEL GENERATION HELPERS ==========

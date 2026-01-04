@@ -1,0 +1,21 @@
+{
+    "name": "Cronch - Gestión de Negocios",
+    "short_name": "Cronch",
+    "description": "Tu sistema de gestión de ventas, gastos y producción.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#F97316",
+    "icons": [
+        {
+            "src": "/AppIcons/playstore.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/AppIcons/appstore.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

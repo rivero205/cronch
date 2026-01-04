@@ -1,158 +1,154 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, Download, Loader2, FileText } from 'lucide-react';
+import { X, Calendar, Download, Loader2, FileText, Play } from 'lucide-react';
 import { api } from '../api';
+import { useToast } from '../contexts/ToastContext';
 
-const ReportModal = ({ report, onClose }) => {
-    // Determine default period based on report configuration
-    const defaultPeriod = report?.allowedPeriods === 'month' ? 'month' : 'week';
-    const [period, setPeriod] = useState(defaultPeriod); // week, month
-    const [date, setDate] = useState('');
+const ReportModal = ({ report, onClose, selectedBusinessId }) => {
+    const { toast } = useToast();
     const [loading, setLoading] = useState(false);
-    const [downloadLoading, setDownloadLoading] = useState(false);
+    const [downloading, setDownloading] = useState(false);
     const [reportData, setReportData] = useState(null);
-    const [error, setError] = useState(null);
 
-    if (!report) return null;
+    // Determine default period logic
+    const [period, setPeriod] = useState(() => {
+        if (report?.allowedPeriods === 'month') return 'month';
+        return 'week';
+    });
 
-    // Helper to get week dates from a reference date
-    const getWeekDates = (referenceDate) => {
-        const d = new Date(referenceDate);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(d.setDate(diff));
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
+    // Date Input State
+    const [dateValue, setDateValue] = useState(() => {
+        const d = new Date();
+        return d.toISOString().split('T')[0]; // Default to today
+    });
 
-        return {
-            start: monday.toISOString().split('T')[0],
-            end: sunday.toISOString().split('T')[0]
-        };
+    // We calculate the actual start/end range whenever period or dateValue changes
+    const [computedRange, setComputedRange] = useState({ start: '', end: '' });
+
+    // Formatting helper
+    const formatCurrency = (amount) => {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(amount);
     };
 
-    // Helper to get month dates
-    const getMonthDates = (monthStr) => {
-        const [year, month] = monthStr.split('-');
-        const lastDay = new Date(year, month, 0).getDate();
-        return {
-            start: `${year}-${month}-01`,
-            end: `${year}-${month}-${lastDay.toString().padStart(2, '0')}`
-        };
-    };
+    // Calculate computed range
+    useEffect(() => {
+        if (!dateValue) return;
 
-    const handleGenerate = async () => {
-        if (!date) {
-            setError('Por favor selecciona una fecha');
-            return;
-        }
+        let start = '';
+        let end = '';
 
-        setLoading(true);
-        setError(null);
-        setReportData(null);
+        if (period === 'week') {
+            const d = new Date(dateValue);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            const monday = new Date(d);
+            monday.setDate(diff);
+            const sunday = new Date(monday);
+            sunday.setDate(monday.getDate() + 6);
 
-        try {
-            let data;
+            start = monday.toISOString().split('T')[0];
+            end = sunday.toISOString().split('T')[0];
 
-            switch (report.id) {
-                case 1: // Resumen Semanal
-                    data = await api.getWeeklyReport(date);
-                    break;
-
-                case 2: // Resumen Mensual
-                    data = await api.getMonthlyReport(date);
-                    break;
-
-                case 3: { // Rentabilidad por Producto
-                    const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
-                    data = await api.getProductProfitability(dates.start, dates.end);
-                    break;
-                }
-
-                case 4: { // Tendencia Diaria
-                    const dates = getWeekDates(date);
-                    data = await api.getDailyTrend(dates.start, dates.end);
-                    break;
-                }
-
-                case 5: { // Producto Más Rentable
-                    const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
-                    data = await api.getMostProfitable(dates.start, dates.end);
-                    break;
-                }
-
-                default:
-                    throw new Error('Reporte no implementado');
+        } else if (period === 'month') {
+            let year, month;
+            if (dateValue.length === 7) {
+                [year, month] = dateValue.split('-');
+            } else {
+                const d = new Date(dateValue);
+                year = d.getFullYear();
+                month = d.getMonth() + 1;
             }
 
-            setReportData(data);
-        } catch (err) {
-            setError(err.message || 'Error al generar el reporte');
+            const lastDayDate = new Date(year, month, 0);
+            const daysInMonth = lastDayDate.getDate();
+
+            start = `${year}-${month.toString().padStart(2, '0')}-01`;
+            end = `${year}-${month.toString().padStart(2, '0')}-${daysInMonth}`;
+        }
+
+        setComputedRange({ start, end });
+        // NOTE: Auto-fetch removed as per user request
+    }, [dateValue, period]);
+
+    const handleFetchData = async () => {
+        // Reset previous data to show loading state or keep it? 
+        // User wants description to disappear when generated. 
+        // So valid flow: Description -> Loading -> Data.
+        setLoading(true);
+        setReportData(null); // Clear previous data to hide results and show loading
+
+        try {
+            const { start, end } = computedRange;
+            let result;
+
+            switch (report.id) {
+                case 1: // Weekly
+                    result = await api.getWeeklyReport(start, selectedBusinessId);
+                    break;
+                case 2: // Monthly
+                    const monthStr = start.substring(0, 7);
+                    result = await api.getMonthlyReport(monthStr, selectedBusinessId);
+                    break;
+                case 3: // Product Profitability
+                    result = await api.getProductProfitability(start, end, selectedBusinessId);
+                    break;
+                case 4: // Daily Trend
+                    result = await api.getDailyTrend(start, end, selectedBusinessId);
+                    break;
+                case 5: // Most Profitable
+                    result = await api.getMostProfitable(start, end, selectedBusinessId);
+                    break;
+                default:
+                    break;
+            }
+            setReportData(result);
+        } catch (error) {
+            console.error('Error fetching report:', error);
+            toast.error('Error al generar el reporte');
+            setReportData(null);
         } finally {
             setLoading(false);
         }
     };
 
-    const formatCurrency = (value) => {
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        }).format(value);
-    };
-
-    const handleDownloadReport = async () => {
-        if (!date || !reportData) {
-            setError('Por favor genera el reporte primero');
-            return;
-        }
-
-        setDownloadLoading(true);
-        setError(null);
-
+    const handleDownload = async () => {
+        setDownloading(true);
         try {
-            let detailedData;
-
-            // Generate filename based on report type and dates
-            let filename = 'reporte.xlsx';
             let blob;
+            let filename = `reporte.xlsx`;
+            const { start, end } = computedRange;
 
             switch (report.id) {
-                case 1: // Resumen Semanal
-                    blob = await api.getDetailedWeeklyReport(date);
-                    filename = `Reporte_Semanal_${date}.xlsx`;
+                case 1:
+                    blob = await api.getDetailedWeeklyReport(start, selectedBusinessId);
+                    filename = `reporte-semanal-${start}.xlsx`;
                     break;
-
-                case 2: // Resumen Mensual
-                    blob = await api.getDetailedMonthlyReport(date);
-                    filename = `Reporte_Mensual_${date}.xlsx`;
+                case 2:
+                    const monthStr = start.substring(0, 7);
+                    blob = await api.getDetailedMonthlyReport(monthStr, selectedBusinessId);
+                    filename = `reporte-mensual-${monthStr}.xlsx`;
                     break;
-
-                case 3: { // Rentabilidad por Producto
-                    const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
-                    blob = await api.getDetailedProductProfitability(dates.start, dates.end);
-                    filename = `Rentabilidad_Productos_${dates.start}_${dates.end}.xlsx`;
+                case 3:
+                    blob = await api.getDetailedProductProfitability(start, end, selectedBusinessId);
+                    filename = `rentabilidad-productos-${start}.xlsx`;
                     break;
-                }
-
-                case 4: { // Tendencia Diaria
-                    const dates = getWeekDates(date);
-                    blob = await api.getDetailedDailyTrend(dates.start, dates.end);
-                    filename = `Tendencia_Diaria_${dates.start}_${dates.end}.xlsx`;
+                case 4:
+                    blob = await api.getDetailedDailyTrend(start, end, selectedBusinessId);
+                    filename = `tendencia-diaria-${start}.xlsx`;
                     break;
-                }
-
-                case 5: { // Producto Más Rentable
-                    const dates = period === 'month' ? getMonthDates(date) : getWeekDates(date);
-                    blob = await api.getDetailedMostProfitable(dates.start, dates.end);
-                    filename = `Producto_Mas_Rentable_${dates.start}_${dates.end}.xlsx`;
+                case 5:
+                    blob = await api.getDetailedMostProfitable(start, end, selectedBusinessId);
+                    filename = `mas-rentable-${start}.xlsx`;
                     break;
-                }
-
                 default:
-                    throw new Error('Reporte no implementado');
+                    throw new Error('Descarga no soportada');
             }
 
-            // Trigger download
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -163,27 +159,26 @@ const ReportModal = ({ report, onClose }) => {
             window.URL.revokeObjectURL(url);
 
         } catch (err) {
-            setError(err.message || 'Error al descargar el reporte');
+            console.error(err);
+            toast.error("Error al descargar reporte");
         } finally {
-            setDownloadLoading(false);
+            setDownloading(false);
         }
     };
 
-    // Legacy text generation functions removed
-
-
     const renderReportData = () => {
+        // If loading, show spinner (handled in parent render), if no data, show nothing (or description)
         if (!reportData) return null;
 
         switch (report.id) {
             case 1: // Resumen Semanal
                 return (
-                    <div className="bg-green-50 p-4 rounded-xl space-y-3">
+                    <div className="bg-green-50 p-4 rounded-xl space-y-3 animate-fadeIn">
                         <h5 className="font-bold text-brand-coffee">Resultados de la Semana</h5>
                         <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
                                 <p className="text-gray-600">Período:</p>
-                                <p className="font-semibold">{reportData.period.start} - {reportData.period.end}</p>
+                                <p className="font-semibold">{reportData.period?.start} - {reportData.period?.end}</p>
                             </div>
                             <div>
                                 <p className="text-gray-600">Total Ventas:</p>
@@ -213,7 +208,7 @@ const ReportModal = ({ report, onClose }) => {
 
             case 2: // Resumen Mensual
                 return (
-                    <div className="bg-blue-50 p-4 rounded-xl space-y-3">
+                    <div className="bg-blue-50 p-4 rounded-xl space-y-3 animate-fadeIn">
                         <h5 className="font-bold text-brand-coffee">Resultados del Mes</h5>
                         <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
@@ -246,12 +241,12 @@ const ReportModal = ({ report, onClose }) => {
                     </div>
                 );
 
-            case 3: // Rentabilidad por Producto
+            case 3: // Rentabilidad
                 return (
-                    <div className="bg-purple-50 p-4 rounded-xl space-y-3 max-h-96 overflow-y-auto">
+                    <div className="bg-purple-50 p-4 rounded-xl space-y-3 max-h-96 overflow-y-auto animate-fadeIn">
                         <h5 className="font-bold text-brand-coffee">Rentabilidad por Producto</h5>
-                        <p className="text-xs text-gray-600">Período: {reportData.period.start} - {reportData.period.end}</p>
-                        {reportData.products.map(product => (
+                        <p className="text-xs text-gray-600">Período: {reportData.period?.start} - {reportData.period?.end}</p>
+                        {reportData.products?.map(product => (
                             <div key={product.id} className="bg-white p-3 rounded-lg border border-purple-200">
                                 <h6 className="font-bold text-brand-coffee mb-2">{product.name}</h6>
                                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -279,12 +274,12 @@ const ReportModal = ({ report, onClose }) => {
                     </div>
                 );
 
-            case 4: // Tendencia Diaria
+            case 4: // Tendencia
                 return (
-                    <div className="bg-orange-50 p-4 rounded-xl space-y-3 max-h-96 overflow-y-auto">
+                    <div className="bg-orange-50 p-4 rounded-xl space-y-3 max-h-96 overflow-y-auto animate-fadeIn">
                         <h5 className="font-bold text-brand-coffee">Tendencia Diaria</h5>
-                        <p className="text-xs text-gray-600">Semana: {reportData.period.start} - {reportData.period.end}</p>
-                        {reportData.dailyData.map((day, idx) => (
+                        <p className="text-xs text-gray-600">Período: {reportData.period?.start} - {reportData.period?.end}</p>
+                        {reportData.dailyData?.map((day, idx) => (
                             <div key={idx} className="bg-white p-3 rounded-lg border border-orange-200">
                                 <h6 className="font-bold text-brand-coffee mb-2">{day.date}</h6>
                                 <div className="grid grid-cols-3 gap-2 text-sm">
@@ -308,20 +303,20 @@ const ReportModal = ({ report, onClose }) => {
                     </div>
                 );
 
-            case 5: // Producto Más Rentable
+            case 5: // MVP
                 if (!reportData.product) {
                     return (
-                        <div className="bg-yellow-50 p-4 rounded-xl">
-                            <p className="text-center text-gray-600">{reportData.message}</p>
+                        <div className="bg-yellow-50 p-4 rounded-xl animate-fadeIn">
+                            <p className="text-center text-gray-600">{reportData.message || 'No hay datos'}</p>
                         </div>
                     );
                 }
                 return (
-                    <div className="bg-yellow-50 p-4 rounded-xl space-y-3">
+                    <div className="bg-yellow-50 p-4 rounded-xl space-y-3 animate-fadeIn">
                         <h5 className="font-bold text-brand-coffee flex items-center gap-2">
                             <span className="text-2xl">🏆</span> Producto Más Rentable
                         </h5>
-                        <p className="text-xs text-gray-600">Período: {reportData.period.start} - {reportData.period.end}</p>
+                        <p className="text-xs text-gray-600">Período: {reportData.period?.start} - {reportData.period?.end}</p>
                         <div className="bg-white p-4 rounded-lg border-2 border-yellow-400">
                             <h6 className="font-bold text-xl text-brand-coffee mb-3">{reportData.product.name}</h6>
                             <div className="grid grid-cols-2 gap-3 text-sm">
@@ -347,6 +342,8 @@ const ReportModal = ({ report, onClose }) => {
         }
     };
 
+    if (!report) return null;
+
     return createPortal(
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-[9999] p-4 backdrop-blur-sm">
             <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all animate-in fade-in zoom-in-95 duration-200">
@@ -365,26 +362,31 @@ const ReportModal = ({ report, onClose }) => {
 
                 {/* Body */}
                 <div className="p-6 space-y-6">
-                    {!reportData && (
-                        <>
-                            <div>
-                                <h4 className="font-semibold text-brand-coffee mb-2">Descripción</h4>
-                                <p className="text-sm text-gray-600 leading-relaxed">{report.details}</p>
+                    {/* Description - Only visible if no data has been generated yet */}
+                    {!reportData && !loading && (
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                            <div className="flex gap-3">
+                                <FileText className="text-brand-gray flex-shrink-0" size={20} />
+                                <div>
+                                    <p className="text-sm text-gray-700 leading-relaxed mb-2">
+                                        {report.details || report.description}
+                                    </p>
+                                    {report.dataPoints && (
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            {report.dataPoints.map((point, i) => (
+                                                <span key={i} className="text-xs bg-white px-2 py-1 rounded-md border border-gray-200 text-gray-500 font-medium shadow-sm">
+                                                    {point}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-
-                            <div>
-                                <h4 className="font-semibold text-brand-coffee mb-2">Datos Incluidos</h4>
-                                <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
-                                    {report.dataPoints.map((point, idx) => (
-                                        <li key={idx}>{point}</li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </>
+                        </div>
                     )}
 
                     {/* Controls */}
-                    <div className="bg-gray-50 p-4 rounded-xl space-y-4">
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm space-y-4">
                         <h4 className="font-semibold text-sm text-brand-coffee flex items-center">
                             <Calendar size={16} className="mr-2" />
                             Configuración
@@ -406,8 +408,8 @@ const ReportModal = ({ report, onClose }) => {
                                     <input
                                         type={period === 'month' ? 'month' : 'date'}
                                         className="w-full p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none"
-                                        value={date}
-                                        onChange={(e) => setDate(e.target.value)}
+                                        value={dateValue}
+                                        onChange={(e) => setDateValue(e.target.value)}
                                     />
                                 </div>
                             ) : (
@@ -418,71 +420,101 @@ const ReportModal = ({ report, onClose }) => {
                                     <input
                                         type={report.allowedPeriods === 'month' ? 'month' : 'date'}
                                         className="w-full p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-brand-orange focus:border-transparent outline-none"
-                                        value={date}
-                                        onChange={(e) => setDate(e.target.value)}
+                                        value={dateValue}
+                                        onChange={(e) => setDateValue(e.target.value)}
                                     />
+                                </div>
+                            )}
+
+                            {/* Super Admin Notice */}
+                            {selectedBusinessId && (
+                                <div className="text-xs text-brand-orange font-medium bg-orange-50 px-2 py-1 rounded">
+                                    Viendo datos de Negocio ID: {selectedBusinessId}
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Error Display */}
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">
-                            {error}
+                    {/* Results Area */}
+                    {loading ? (
+                        <div className="flex justify-center py-8">
+                            <Loader2 size={32} className="text-brand-orange animate-spin" />
                         </div>
+                    ) : (
+                        renderReportData()
                     )}
-
-                    {/* Report Data Display */}
-                    {renderReportData()}
                 </div>
 
-                {/* Footer */}
-                <div className="p-6 pt-0 sticky bottom-0 bg-white space-y-3">
-                    {/* Download Button - Only show if report data exists */}
-                    {reportData && (
+                {/* Footer Actions */}
+                <div className="p-6 pt-0 sticky bottom-0 bg-white border-t border-gray-50 pt-4 mt-6">
+                    <div className="flex gap-3">
+                        {/* Generation Button - Always visible, text changes if update */}
                         <button
-                            onClick={handleDownloadReport}
-                            disabled={downloadLoading}
-                            className="w-full py-3 px-4 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all shadow-md hover:shadow-lg flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={handleFetchData}
+                            disabled={loading || !dateValue}
+                            className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all shadow-md hover:shadow-lg flex justify-center items-center
+                                ${reportData
+                                    ? 'bg-white border-2 border-brand-orange text-brand-orange hover:bg-orange-50'
+                                    : 'bg-brand-orange text-white hover:bg-orange-600 py-4 text-lg'
+                                }`}
                         >
-                            {downloadLoading ? (
-                                <>
-                                    <Loader2 size={20} className="mr-2 animate-spin" />
-                                    Descargando...
-                                </>
+                            {loading ? (
+                                <Loader2 size={20} className="animate-spin" />
                             ) : (
                                 <>
-                                    <Download size={20} className="mr-2" />
-                                    Descargar Reporte Detallado
+                                    {reportData ? <RefreshCwIcon size={20} className="mr-2" /> : <Play size={20} className="mr-2 fill-current" />}
+                                    {reportData ? 'Actualizar Reporte' : 'Generar Reporte'}
                                 </>
                             )}
                         </button>
-                    )}
 
-                    {/* Generate Button */}
-                    <button
-                        onClick={handleGenerate}
-                        disabled={loading}
-                        className="w-full py-3 px-4 bg-brand-orange text-white rounded-xl font-bold hover:bg-orange-600 transition-all shadow-md hover:shadow-lg flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            <>
-                                <Loader2 size={20} className="mr-2 animate-spin" />
-                                Generando...
-                            </>
-                        ) : (
-                            <>
-                                <FileText size={20} className="mr-2" />
-                                Generar Reporte
-                            </>
+                        {/* Download Button - Only visible if data exists */}
+                        {reportData && (
+                            <button
+                                onClick={handleDownload}
+                                disabled={downloading || loading}
+                                className="flex-1 py-3 px-4 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all shadow-md hover:shadow-lg flex justify-center items-center disabled:opacity-50"
+                            >
+                                {downloading ? (
+                                    <>
+                                        <Loader2 size={20} className="mr-2 animate-spin" />
+                                        Descargando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download size={20} className="mr-2" />
+                                        Descargar Detallado
+                                    </>
+                                )}
+                            </button>
                         )}
-                    </button>
+                    </div>
                 </div>
             </div>
         </div>,
         document.body
     );
 };
+
+// Simple Refresh icon component to avoid import error if not imported above
+const RefreshCwIcon = ({ size, className }) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={className}
+    >
+        <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+        <path d="M21 3v5h-5" />
+        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+        <path d="M3 21v-5h5" />
+    </svg>
+);
 
 export default ReportModal;
